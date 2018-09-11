@@ -1,0 +1,14 @@
+[package]
+name = "verify_gil"
+version = "0.1.0"
+authors = ["Joar Wandborg <joar@wandborg.se>"]
+
+[dependencies]
+
+[dependencies.pyo3]
+path = "../../"
+features = ["extension-module"]
+
+[lib]
+name = "verify_gil"
+crate-type = ["cdylib"]
