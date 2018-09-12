@@ -11,8 +11,8 @@ use rayon::prelude::*;
 use std::fs;
 use std::path::PathBuf;
 
-#[pyclass]
 /// Represents a file that can be searched
+#[pyclass(subclass)]
 struct WordCounter {
     path: PathBuf,
 }

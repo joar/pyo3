@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .word_count import WordCounter, count_line
+from .word_count import WordCounter as _WordCounter, count_line
 
 __all__ = ["WordCounter", "count_line", "search_py"]
+
+
+class WordCounter(_WordCounter):
+    def __new__(cls, *args, **kwargs):
+        return super(WordCounter, cls).__new__(cls, *args, **kwargs)
 
 
 def search_py(path, needle):
