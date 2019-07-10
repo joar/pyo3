@@ -3,14 +3,14 @@
 //! Python Mapping Interface
 //! Trait and support implementation for implementing mapping support
 
-use callback::{LenResultConverter, PyObjectCallbackConverter};
-use class::methods::PyMethodDef;
-use conversion::{FromPyObject, IntoPyObject};
-use err::{PyErr, PyResult};
-use ffi;
-use objects::exc;
-use python::Python;
-use typeob::PyTypeInfo;
+use crate::callback::{LenResultConverter, PyObjectCallbackConverter};
+use crate::class::methods::PyMethodDef;
+use crate::err::{PyErr, PyResult};
+use crate::exceptions;
+use crate::ffi;
+use crate::type_object::PyTypeInfo;
+use crate::Python;
+use crate::{FromPyObject, IntoPyObject};
 
 /// Mapping interface
 #[allow(unused_variables)]

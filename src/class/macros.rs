@@ -29,17 +29,17 @@ macro_rules! py_unary_func {
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! py_unary_func_self {
-    ($trait:ident, $class:ident :: $f:ident, $res_type:ty, $conv:ty) => {{
+macro_rules! py_unary_pyref_func {
+    ($trait:ident, $class:ident :: $f:ident, $res_type:ty, $conv:expr) => {{
         unsafe extern "C" fn wrap<T>(slf: *mut $crate::ffi::PyObject) -> *mut $crate::ffi::PyObject
         where
             T: for<'p> $trait<'p>,
         {
-            use $crate::ObjectProtocol;
+            use $crate::instance::PyRefMut;
             let _pool = $crate::GILPool::new();
             let py = $crate::Python::assume_gil_acquired();
             let slf = py.mut_from_borrowed_ptr::<T>(slf);
-            let res = slf.$f().into();
+            let res = $class::$f(PyRefMut::from_mut(slf)).into();
             $crate::callback::cb_convert($conv, py, res)
         }
         Some(wrap::<$class>)
@@ -87,7 +87,7 @@ macro_rules! py_binary_func {
             let _pool = $crate::GILPool::new();
             let py = $crate::Python::assume_gil_acquired();
             let slf = py.mut_from_borrowed_ptr::<T>(slf);
-            let arg = py.from_borrowed_ptr::<$crate::PyObjectRef>(arg);
+            let arg = py.from_borrowed_ptr::<$crate::types::PyAny>(arg);
 
             let result = match arg.extract() {
                 Ok(arg) => slf.$f(arg).into(),
@@ -114,8 +114,8 @@ macro_rules! py_binary_num_func {
             use $crate::ObjectProtocol;
             let _pool = $crate::GILPool::new();
             let py = $crate::Python::assume_gil_acquired();
-            let lhs = py.from_borrowed_ptr::<$crate::PyObjectRef>(lhs);
-            let rhs = py.from_borrowed_ptr::<$crate::PyObjectRef>(rhs);
+            let lhs = py.from_borrowed_ptr::<$crate::types::PyAny>(lhs);
+            let rhs = py.from_borrowed_ptr::<$crate::types::PyAny>(rhs);
 
             let result = match lhs.extract() {
                 Ok(lhs) => match rhs.extract() {
@@ -147,7 +147,7 @@ macro_rules! py_binary_self_func {
             let _pool = $crate::GILPool::new();
             let py = $crate::Python::assume_gil_acquired();
             let slf1 = py.mut_from_borrowed_ptr::<T>(slf);
-            let arg = py.from_borrowed_ptr::<$crate::PyObjectRef>(arg);
+            let arg = py.from_borrowed_ptr::<$crate::types::PyAny>(arg);
 
             let result = match arg.extract() {
                 Ok(arg) => slf1.$f(arg).into(),
@@ -160,7 +160,7 @@ macro_rules! py_binary_self_func {
                 }
                 Err(e) => {
                     e.restore(py);
-                    $crate::std::ptr::null_mut()
+                    std::ptr::null_mut()
                 }
             }
         }
@@ -183,7 +183,7 @@ macro_rules! py_ssizearg_func {
             let _pool = $crate::GILPool::new();
             let py = $crate::Python::assume_gil_acquired();
             let slf = py.mut_from_borrowed_ptr::<T>(slf);
-            let result = slf.$f(arg as isize).into();
+            let result = slf.$f(arg.into()).into();
             $crate::callback::cb_convert($conv, py, result)
         }
         Some(wrap::<$class>)
@@ -216,8 +216,8 @@ macro_rules! py_ternary_func {
             let _pool = $crate::GILPool::new();
             let py = $crate::Python::assume_gil_acquired();
             let slf = py.mut_from_borrowed_ptr::<T>(slf);
-            let arg1 = py.from_borrowed_ptr::<$crate::PyObjectRef>(arg1);
-            let arg2 = py.from_borrowed_ptr::<$crate::PyObjectRef>(arg2);
+            let arg1 = py.from_borrowed_ptr::<$crate::types::PyAny>(arg1);
+            let arg2 = py.from_borrowed_ptr::<$crate::types::PyAny>(arg2);
 
             let result = match arg1.extract() {
                 Ok(arg1) => match arg2.extract() {
@@ -249,9 +249,9 @@ macro_rules! py_ternary_num_func {
 
             let _pool = $crate::GILPool::new();
             let py = $crate::Python::assume_gil_acquired();
-            let arg1 = py.from_borrowed_ptr::<$crate::PyObjectRef>(arg1);
-            let arg2 = py.from_borrowed_ptr::<$crate::PyObjectRef>(arg2);
-            let arg3 = py.from_borrowed_ptr::<$crate::PyObjectRef>(arg3);
+            let arg1 = py.from_borrowed_ptr::<$crate::types::PyAny>(arg1);
+            let arg2 = py.from_borrowed_ptr::<$crate::types::PyAny>(arg2);
+            let arg3 = py.from_borrowed_ptr::<$crate::types::PyAny>(arg3);
 
             let result = match arg1.extract() {
                 Ok(arg1) => match arg2.extract() {
@@ -287,8 +287,8 @@ macro_rules! py_ternary_self_func {
             let _pool = $crate::GILPool::new();
             let py = $crate::Python::assume_gil_acquired();
             let slf1 = py.mut_from_borrowed_ptr::<T>(slf);
-            let arg1 = py.from_borrowed_ptr::<$crate::PyObjectRef>(arg1);
-            let arg2 = py.from_borrowed_ptr::<$crate::PyObjectRef>(arg2);
+            let arg1 = py.from_borrowed_ptr::<$crate::types::PyAny>(arg1);
+            let arg2 = py.from_borrowed_ptr::<$crate::types::PyAny>(arg2);
 
             let result = match arg1.extract() {
                 Ok(arg1) => match arg2.extract() {
@@ -302,7 +302,7 @@ macro_rules! py_ternary_self_func {
                 Ok(_) => slf,
                 Err(e) => {
                     e.restore(py);
-                    $crate::std::ptr::null_mut()
+                    std::ptr::null_mut()
                 }
             }
         }
@@ -317,7 +317,7 @@ macro_rules! py_func_set {
             slf: *mut $crate::ffi::PyObject,
             name: *mut $crate::ffi::PyObject,
             value: *mut $crate::ffi::PyObject,
-        ) -> $crate::libc::c_int
+        ) -> libc::c_int
         where
             T: for<'p> $trait_name<'p>,
         {
@@ -328,13 +328,15 @@ macro_rules! py_func_set {
             let slf = py.mut_from_borrowed_ptr::<$generic>(slf);
 
             let result = if value.is_null() {
-                Err($crate::PyErr::new::<exc::NotImplementedError, _>(format!(
-                    "Subscript deletion not supported by {:?}",
-                    stringify!($generic)
-                )))
+                Err($crate::PyErr::new::<exceptions::NotImplementedError, _>(
+                    format!(
+                        "Subscript deletion not supported by {:?}",
+                        stringify!($generic)
+                    ),
+                ))
             } else {
-                let name = py.mut_from_borrowed_ptr::<$crate::PyObjectRef>(name);
-                let value = py.from_borrowed_ptr::<$crate::PyObjectRef>(value);
+                let name = py.mut_from_borrowed_ptr::<$crate::types::PyAny>(name);
+                let value = py.from_borrowed_ptr::<$crate::types::PyAny>(value);
                 match name.extract() {
                     Ok(name) => match value.extract() {
                         Ok(value) => slf.$fn_set(name, value).into(),
@@ -363,7 +365,7 @@ macro_rules! py_func_del {
             slf: *mut $crate::ffi::PyObject,
             name: *mut $crate::ffi::PyObject,
             value: *mut $crate::ffi::PyObject,
-        ) -> $crate::libc::c_int
+        ) -> libc::c_int
         where
             U: for<'p> $trait_name<'p>,
         {
@@ -374,14 +376,14 @@ macro_rules! py_func_del {
 
             let result = if value.is_null() {
                 let slf = py.mut_from_borrowed_ptr::<U>(slf);
-                let name = py.from_borrowed_ptr::<$crate::PyObjectRef>(name);
+                let name = py.from_borrowed_ptr::<$crate::types::PyAny>(name);
 
                 match name.extract() {
                     Ok(name) => slf.$fn_del(name).into(),
                     Err(e) => Err(e.into()),
                 }
             } else {
-                Err(PyErr::new::<exc::NotImplementedError, _>(
+                Err(PyErr::new::<exceptions::NotImplementedError, _>(
                     "Subscript assignment not supported",
                 ))
             };
@@ -405,7 +407,7 @@ macro_rules! py_func_set_del {
             slf: *mut $crate::ffi::PyObject,
             name: *mut $crate::ffi::PyObject,
             value: *mut $crate::ffi::PyObject,
-        ) -> $crate::libc::c_int
+        ) -> libc::c_int
         where
             T: for<'p> $trait1<'p> + for<'p> $trait2<'p>,
         {
@@ -414,7 +416,7 @@ macro_rules! py_func_set_del {
             let _pool = $crate::GILPool::new();
             let py = $crate::Python::assume_gil_acquired();
             let slf = py.mut_from_borrowed_ptr::<$generic>(slf);
-            let name = py.from_borrowed_ptr::<$crate::PyObjectRef>(name);
+            let name = py.from_borrowed_ptr::<$crate::types::PyAny>(name);
 
             let result = if value.is_null() {
                 match name.extract() {
@@ -422,7 +424,7 @@ macro_rules! py_func_set_del {
                     Err(e) => Err(e.into()),
                 }
             } else {
-                let value = py.from_borrowed_ptr::<$crate::PyObjectRef>(value);
+                let value = py.from_borrowed_ptr::<$crate::types::PyAny>(value);
                 match name.extract() {
                     Ok(name) => match value.extract() {
                         Ok(value) => slf.$fn_set(name, value).into(),

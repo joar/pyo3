@@ -3,17 +3,18 @@
 //! Python Sequence Interface
 //! Trait and support implementation for implementing sequence
 
-use callback::{BoolCallbackConverter, LenResultConverter, PyObjectCallbackConverter};
-use conversion::{FromPyObject, IntoPyObject};
-use err::{PyErr, PyResult};
-use ffi;
-use objectprotocol::ObjectProtocol;
-use objects::{exc, PyObjectRef};
-use python::Python;
+use crate::callback::{BoolCallbackConverter, LenResultConverter, PyObjectCallbackConverter};
+use crate::err::{PyErr, PyResult};
+use crate::exceptions;
+use crate::ffi;
+use crate::objectprotocol::ObjectProtocol;
+use crate::type_object::PyTypeInfo;
+use crate::types::PyAny;
+use crate::Python;
+use crate::{FromPyObject, IntoPyObject};
 use std::os::raw::c_int;
-use typeob::PyTypeInfo;
 
-/// Sequece interface
+/// Sequence interface
 #[allow(unused_variables)]
 pub trait PySequenceProtocol<'p>: PyTypeInfo + Sized {
     fn __len__(&'p self) -> Self::Result
@@ -23,21 +24,21 @@ pub trait PySequenceProtocol<'p>: PyTypeInfo + Sized {
         unimplemented!()
     }
 
-    fn __getitem__(&'p self, key: isize) -> Self::Result
+    fn __getitem__(&'p self, idx: Self::Index) -> Self::Result
     where
         Self: PySequenceGetItemProtocol<'p>,
     {
         unimplemented!()
     }
 
-    fn __setitem__(&'p mut self, key: isize, value: Self::Value) -> Self::Result
+    fn __setitem__(&'p mut self, idx: Self::Index, value: Self::Value) -> Self::Result
     where
         Self: PySequenceSetItemProtocol<'p>,
     {
         unimplemented!()
     }
 
-    fn __delitem__(&'p mut self, key: isize) -> Self::Result
+    fn __delitem__(&'p mut self, idx: Self::Index) -> Self::Result
     where
         Self: PySequenceDelItemProtocol<'p>,
     {
@@ -58,7 +59,7 @@ pub trait PySequenceProtocol<'p>: PyTypeInfo + Sized {
         unimplemented!()
     }
 
-    fn __repeat__(&'p self, count: isize) -> Self::Result
+    fn __repeat__(&'p self, count: Self::Index) -> Self::Result
     where
         Self: PySequenceRepeatProtocol<'p>,
     {
@@ -72,7 +73,7 @@ pub trait PySequenceProtocol<'p>: PyTypeInfo + Sized {
         unimplemented!()
     }
 
-    fn __inplace_repeat__(&'p mut self, count: isize) -> Self::Result
+    fn __inplace_repeat__(&'p mut self, count: Self::Index) -> Self::Result
     where
         Self: PySequenceInplaceRepeatProtocol<'p>,
     {
@@ -88,16 +89,19 @@ pub trait PySequenceLenProtocol<'p>: PySequenceProtocol<'p> {
 }
 
 pub trait PySequenceGetItemProtocol<'p>: PySequenceProtocol<'p> {
+    type Index: FromPyObject<'p> + From<isize>;
     type Success: IntoPyObject;
     type Result: Into<PyResult<Self::Success>>;
 }
 
 pub trait PySequenceSetItemProtocol<'p>: PySequenceProtocol<'p> {
+    type Index: FromPyObject<'p> + From<isize>;
     type Value: FromPyObject<'p>;
     type Result: Into<PyResult<()>>;
 }
 
 pub trait PySequenceDelItemProtocol<'p>: PySequenceProtocol<'p> {
+    type Index: FromPyObject<'p> + From<isize>;
     type Result: Into<PyResult<()>>;
 }
 
@@ -113,6 +117,7 @@ pub trait PySequenceConcatProtocol<'p>: PySequenceProtocol<'p> {
 }
 
 pub trait PySequenceRepeatProtocol<'p>: PySequenceProtocol<'p> {
+    type Index: FromPyObject<'p> + From<isize>;
     type Success: IntoPyObject;
     type Result: Into<PyResult<Self::Success>>;
 }
@@ -123,6 +128,7 @@ pub trait PySequenceInplaceConcatProtocol<'p>: PySequenceProtocol<'p> + IntoPyOb
 }
 
 pub trait PySequenceInplaceRepeatProtocol<'p>: PySequenceProtocol<'p> + IntoPyObject {
+    type Index: FromPyObject<'p> + From<isize>;
     type Result: Into<PyResult<Self>>;
 }
 
@@ -140,8 +146,7 @@ where
     T: PySequenceProtocol<'p>,
 {
     fn tp_as_sequence() -> Option<ffi::PySequenceMethods> {
-        #[cfg(Py_3)]
-        return Some(ffi::PySequenceMethods {
+        Some(ffi::PySequenceMethods {
             sq_length: Self::sq_length(),
             sq_concat: Self::sq_concat(),
             sq_repeat: Self::sq_repeat(),
@@ -152,21 +157,7 @@ where
             sq_contains: Self::sq_contains(),
             sq_inplace_concat: Self::sq_inplace_concat(),
             sq_inplace_repeat: Self::sq_inplace_repeat(),
-        });
-
-        #[cfg(not(Py_3))]
-        return Some(ffi::PySequenceMethods {
-            sq_length: Self::sq_length(),
-            sq_concat: Self::sq_concat(),
-            sq_repeat: Self::sq_repeat(),
-            sq_item: Self::sq_item(),
-            sq_slice: None,
-            sq_ass_item: sq_ass_item_impl::sq_ass_item::<Self>(),
-            sq_ass_slice: None,
-            sq_contains: Self::sq_contains(),
-            sq_inplace_concat: Self::sq_inplace_concat(),
-            sq_inplace_repeat: Self::sq_inplace_repeat(),
-        });
+        })
     }
 }
 
@@ -230,19 +221,19 @@ where
         where
             T: for<'p> PySequenceSetItemProtocol<'p>,
         {
-            let _pool = ::GILPool::new();
+            let _pool = crate::GILPool::new();
             let py = Python::assume_gil_acquired();
             let slf = py.mut_from_borrowed_ptr::<T>(slf);
 
             let result = if value.is_null() {
-                Err(PyErr::new::<exc::NotImplementedError, _>(format!(
+                Err(PyErr::new::<exceptions::NotImplementedError, _>(format!(
                     "Item deletion not supported by {:?}",
                     stringify!(T)
                 )))
             } else {
-                let value = py.from_borrowed_ptr::<PyObjectRef>(value);
+                let value = py.from_borrowed_ptr::<PyAny>(value);
                 match value.extract() {
-                    Ok(value) => slf.__setitem__(key as isize, value).into(),
+                    Ok(value) => slf.__setitem__(key.into(), value).into(),
                     Err(e) => Err(e),
                 }
             };
@@ -304,14 +295,14 @@ mod sq_ass_item_impl {
             where
                 T: for<'p> PySequenceDelItemProtocol<'p>,
             {
-                let _pool = ::GILPool::new();
+                let _pool = crate::GILPool::new();
                 let py = Python::assume_gil_acquired();
                 let slf = py.mut_from_borrowed_ptr::<T>(slf);
 
                 let result = if value.is_null() {
-                    slf.__delitem__(key as isize).into()
+                    slf.__delitem__(key.into()).into()
                 } else {
-                    Err(PyErr::new::<exc::NotImplementedError, _>(format!(
+                    Err(PyErr::new::<exceptions::NotImplementedError, _>(format!(
                         "Item assignment not supported by {:?}",
                         stringify!(T)
                     )))
@@ -350,16 +341,16 @@ mod sq_ass_item_impl {
             where
                 T: for<'p> PySequenceSetItemProtocol<'p> + for<'p> PySequenceDelItemProtocol<'p>,
             {
-                let _pool = ::GILPool::new();
+                let _pool = crate::GILPool::new();
                 let py = Python::assume_gil_acquired();
                 let slf = py.mut_from_borrowed_ptr::<T>(slf);
 
                 let result = if value.is_null() {
-                    slf.__delitem__(key as isize).into()
+                    slf.__delitem__(key.into()).into()
                 } else {
-                    let value = py.from_borrowed_ptr::<PyObjectRef>(value);
+                    let value = py.from_borrowed_ptr::<PyAny>(value);
                     match value.extract() {
-                        Ok(value) => slf.__setitem__(key as isize, value).into(),
+                        Ok(value) => slf.__setitem__(key.into(), value).into(),
                         Err(e) => Err(e),
                     }
                 };

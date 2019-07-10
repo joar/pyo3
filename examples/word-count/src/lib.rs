@@ -1,18 +1,14 @@
 // Source adopted from
 // https://github.com/tildeio/helix-website/blob/master/crates/word_count/src/lib.rs
-#![feature(specialization)]
-
-#[macro_use]
-extern crate pyo3;
-extern crate rayon;
 
 use pyo3::prelude::*;
+use pyo3::wrap_pyfunction;
 use rayon::prelude::*;
 use std::fs;
 use std::path::PathBuf;
 
 /// Represents a file that can be searched
-#[pyclass(subclass)]
+#[pyclass(module = "word_count", subclass)]
 struct WordCounter {
     path: PathBuf,
 }
@@ -20,14 +16,14 @@ struct WordCounter {
 #[pymethods]
 impl WordCounter {
     #[new]
-    fn __new__(obj: &PyRawObject, path: String) -> PyResult<()> {
-        obj.init(|_| WordCounter {
+    fn new(obj: &PyRawObject, path: String) {
+        obj.init(WordCounter {
             path: PathBuf::from(path),
-        })
+        });
     }
 
     /// Searches for the word, parallelized by rayon
-    fn search(&self, py: Python, search: String) -> PyResult<usize> {
+    fn search(&self, py: Python<'_>, search: String) -> PyResult<usize> {
         let contents = fs::read_to_string(&self.path)?;
 
         let count = py.allow_threads(move || {
@@ -66,8 +62,8 @@ fn matches(word: &str, needle: &str) -> bool {
     return needle.next().is_none();
 }
 
-#[pyfunction]
 /// Count the occurences of needle in line, case insensitive
+#[pyfunction]
 fn count_line(line: &str, needle: &str) -> usize {
     let mut total = 0;
     for word in line.split(' ') {
@@ -78,9 +74,9 @@ fn count_line(line: &str, needle: &str) -> usize {
     total
 }
 
-#[pymodinit]
-fn word_count(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_function!(count_line))?;
+#[pymodule]
+fn word_count(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+    m.add_wrapped(wrap_pyfunction!(count_line))?;
     m.add_class::<WordCounter>()?;
 
     Ok(())

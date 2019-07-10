@@ -1,5 +1,5 @@
-use ffi3::object::PyObject;
-use ffi3::pyport::Py_ssize_t;
+use crate::ffi3::object::PyObject;
+use crate::ffi3::pyport::Py_ssize_t;
 use std::os::raw::{c_char, c_int};
 
 #[cfg_attr(windows, link(name = "pythonXY"))]
@@ -9,6 +9,7 @@ extern "C" {
         message: *const c_char,
         stack_level: Py_ssize_t,
     ) -> c_int;
+    #[cfg_attr(PyPy, link_name = "PyPyErr_WarnFormat")]
     pub fn PyErr_WarnFormat(
         category: *mut PyObject,
         stack_level: Py_ssize_t,

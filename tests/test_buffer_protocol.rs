@@ -1,18 +1,15 @@
-#![feature(specialization)]
-
-extern crate pyo3;
-
-use std::os::raw::{c_int, c_void};
-use std::ptr;
-
-use pyo3::exc::BufferError;
+use pyo3::class::PyBufferProtocol;
+use pyo3::exceptions::BufferError;
 use pyo3::ffi;
 use pyo3::prelude::*;
+use pyo3::types::IntoPyDict;
+use std::ffi::CStr;
+use std::os::raw::{c_int, c_void};
+use std::ptr;
 
 #[pyclass]
 struct TestClass {
     vec: Vec<u8>,
-    token: PyToken,
 }
 
 #[pyproto]
@@ -40,7 +37,7 @@ impl PyBufferProtocol for TestClass {
 
             (*view).format = ptr::null_mut();
             if (flags & ffi::PyBUF_FORMAT) == ffi::PyBUF_FORMAT {
-                let msg = ::std::ffi::CStr::from_ptr("B\0".as_ptr() as *const _);
+                let msg = CStr::from_bytes_with_nul(b"B\0").unwrap();
                 (*view).format = msg.as_ptr() as *mut _;
             }
 
@@ -63,37 +60,19 @@ impl PyBufferProtocol for TestClass {
     }
 }
 
-#[cfg(Py_3)]
 #[test]
 fn test_buffer() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let t = py
-        .init(|t| TestClass {
+    let t = Py::new(
+        py,
+        TestClass {
             vec: vec![b' ', b'2', b'3'],
-            token: t,
-        }).unwrap();
+        },
+    )
+    .unwrap();
 
-    let d = PyDict::new(py);
-    d.set_item("ob", t).unwrap();
+    let d = [("ob", t)].into_py_dict(py);
     py.run("assert bytes(ob) == b' 23'", None, Some(d)).unwrap();
-}
-
-#[cfg(not(Py_3))]
-#[test]
-fn test_buffer() {
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-
-    let t = py
-        .init(|t| TestClass {
-            vec: vec![b' ', b'2', b'3'],
-            token: t,
-        }).unwrap();
-
-    let d = PyDict::new(py);
-    d.set_item("ob", t).unwrap();
-    py.run("assert memoryview(ob).tobytes() == ' 23'", None, Some(d))
-        .unwrap();
 }

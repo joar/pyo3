@@ -2,7 +2,7 @@
 
 ## Macros
 
-Pyo3's attributes, `#[pyclass]`, `#[pymodinit]`, etc. are [procedural macros](https://doc.rust-lang.org/unstable-book/language-features/proc-macro.html), which means that rewrite the source of the annotated item. You can view the generated source with the following command, which also expands a few other things:
+PyO3's attributes (`#[pyclass]`, `#[pymodule]`, etc.) are [procedural macros](https://doc.rust-lang.org/reference/procedural-macros.html), which means that they rewrite the source of the annotated item. You can view the generated source with the following command, which also expands a few other things:
 
 ```bash
 cargo rustc --profile=check -- -Z unstable-options --pretty=expanded > expanded.rs; rustfmt expanded.rs
@@ -10,7 +10,7 @@ cargo rustc --profile=check -- -Z unstable-options --pretty=expanded > expanded.
 
 (You might need to install [rustfmt](https://github.com/rust-lang-nursery/rustfmt) if you don't already have it.)
 
-You can also debug classic `!`-macros by adding -Z trace-macros`:
+You can also debug classic `!`-macros by adding `-Z trace-macros`:
 
 ```bash
 cargo rustc --profile=check -- -Z unstable-options --pretty=expanded -Z trace-macros > expanded.rs; rustfmt expanded.rs
@@ -18,6 +18,23 @@ cargo rustc --profile=check -- -Z unstable-options --pretty=expanded -Z trace-ma
 
 See [cargo expand](https://github.com/dtolnay/cargo-expand) for a more elaborate version of those commands.
 
-## Linking
+## Running with Valgrind
 
-When building, you can set `PYTHON_SYS_EXECUTABLE` to the python interpreter that pyo3 should be linked to. You might need to set the `python2` or `python3` feature accordingly. On linux/mac you might have to change `LD_LIBRARY_PATH` to include libpython, while on windows you might need to set `LIB` to include `pythonxy.lib` (where x and y are major and minor version), which is normally either in the `libs` or `Lib` folder of a python installation. Also make sure that python is in `PATH` when you're not using  `PYTHON_SYS_EXECUTABLE`.
+Valgrind is a tool to detect memory management bugs such as memory leaks.
+
+You first need to install a debug build of Python, otherwise Valgrind won't produce usable results. In Ubuntu there's e.g. a `python3-dbg` package.
+
+Activate an environment with the debug interpreter and recompile. If you're on Linux, use `ldd` with the name of your binary and check that you're linking e.g. `libpython3.6dm.so.1.0` instead of `libpython3.6m.so.1.0`.
+
+[Download the suppressions file for cpython](https://raw.githubusercontent.com/python/cpython/master/Misc/valgrind-python.supp).
+
+Run Valgrind with `valgrind --suppressions=valgrind-python.supp ./my-command --with-options`
+
+## Getting a stacktrace
+
+The best start to investigate a crash such as an segmentation fault is a backtrace.
+
+ * Link against a debug build of python as described in the previous chapter
+ * Run `gdb <my-binary>`
+ * Enter `r` to run
+ * After the crash occurred, enter `bt` or `bt full` to print the stacktrace

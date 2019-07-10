@@ -1,16 +1,13 @@
-#![feature(specialization)]
-
-extern crate pyo3;
-
 use pyo3::prelude::*;
+use pyo3::py_run;
+use pyo3::types::IntoPyDict;
 use std::isize;
 
-#[macro_use]
 mod common;
 
 #[pyclass]
 struct BaseClass {
-    #[prop(get)]
+    #[pyo3(get)]
     val1: usize,
 }
 
@@ -21,38 +18,37 @@ struct SubclassAble {}
 fn subclass() {
     let gil = Python::acquire_gil();
     let py = gil.python();
+    let d = [("SubclassAble", py.get_type::<SubclassAble>())].into_py_dict(py);
 
-    let d = PyDict::new(py);
-    d.set_item("SubclassAble", py.get_type::<SubclassAble>())
-        .unwrap();
     py.run(
         "class A(SubclassAble): pass\nassert issubclass(A, SubclassAble)",
         None,
         Some(d),
-    ).map_err(|e| e.print(py))
+    )
+    .map_err(|e| e.print(py))
     .unwrap();
 }
 
 #[pymethods]
 impl BaseClass {
     #[new]
-    fn __new__(obj: &PyRawObject) -> PyResult<()> {
-        obj.init(|_| BaseClass { val1: 10 })
+    fn new(obj: &PyRawObject) {
+        obj.init(BaseClass { val1: 10 })
     }
 }
 
 #[pyclass(extends=BaseClass)]
 struct SubClass {
-    #[prop(get)]
+    #[pyo3(get)]
     val2: usize,
 }
 
 #[pymethods]
 impl SubClass {
     #[new]
-    fn __new__(obj: &PyRawObject) -> PyResult<()> {
-        obj.init(|_| SubClass { val2: 5 })?;
-        BaseClass::__new__(obj)
+    fn new(obj: &PyRawObject) {
+        obj.init(SubClass { val2: 5 });
+        BaseClass::new(obj);
     }
 }
 
@@ -62,6 +58,6 @@ fn inheritance_with_new_methods() {
     let py = gil.python();
     let _typebase = py.get_type::<BaseClass>();
     let typeobj = py.get_type::<SubClass>();
-    let inst = typeobj.call(NoArgs, None).unwrap();
+    let inst = typeobj.call((), None).unwrap();
     py_run!(py, inst, "assert inst.val1 == 10; assert inst.val2 == 5");
 }

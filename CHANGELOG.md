@@ -1,32 +1,163 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [Unreleased]
 
 ### Added
- 
- * `#[pyclass]` objects can now be returned from rust functions
 
-### Changed
-
- * Slowly removing specialization uses
- * All exceptions are consturcted with `py_err` instead of `new`, as they return `PyErr` and not `Self`.
- * `as_mut` and friends take and `&mut self` instead of `&self`
- * `ObjectProtocol::call` now takes an `Option<PyDict>` for the kwargs instead of an `IntoPyDictPointer`.
- * `IntoPyDictPointer` was replace by `IntoPyDict` which doesn't convert `PyDict` itself anymore and returns a `PyDict` instead of `*mut PyObject`.
- * `PyTuple::new` now takes an `IntoIterator` instead of a slice
+ * `module` argument to `pyclass` macro. [#499](https://github.com/PyO3/pyo3/pull/499)
+ * `py_run!` macro [#512](https://github.com/PyO3/pyo3/pull/512)
 
 ### Fixed
 
- * Added an explenation that the GIL can temporarily be released even while holding a GILGuard.
- * Lots of clippy errors
+ * More readable error message for generics in pyclass [#503](https://github.com/PyO3/pyo3/pull/503)
+
+### Changed
+
+## [0.7.0] - 2018-05-26
+
+### Added
+
+ * PyPy support by omerbenamram in [#393](https://github.com/PyO3/pyo3/pull/393)
+ * Have `PyModule` generate an index of its members (`__all__` list).
+ * Allow `slf: PyRef<T>` for pyclass(#419)
+ * Allow to use lifetime specifiers in `pymethods`
+ * Add `marshal` module. [#460](https://github.com/PyO3/pyo3/pull/460)
+
+### Changed
+ * `Python::run` returns `PyResult<()>` instead of `PyResult<&PyAny>`.
+ * Methods decorated with `#[getter]` and `#[setter]` can now omit wrapping the
+   result type in `PyResult` if they don't raise exceptions.
+
+### Fixed
+
+ * `type_object::PyTypeObject` has been marked unsafe because breaking the contract `type_object::PyTypeObject::init_type` can lead to UB.
+ * Fixed automatic derive of `PySequenceProtocol` implementation in [#423](https://github.com/PyO3/pyo3/pull/423).
+ * Capitalization & better wording to README.md.
+ * Docstrings of properties is now properly set using the doc of the `#[getter]` method.
+ * Fixed issues with `pymethods` crashing on doc comments containing double quotes.
+ * `PySet::new` and `PyFrozenSet::new` now return `PyResult<&Py[Frozen]Set>`; exceptions are raised if
+   the items are not hashable.
+ * Fixed building using `venv` on Windows.
+ * `PyTuple::new` now returns `&PyTuple` instead of `Py<PyTuple>`.
+
+## [0.6.0] - 2018-03-28
+
+### Regressions
+
+ * Currently, [#341](https://github.com/PyO3/pyo3/issues/341) causes `cargo test` to fail with weird linking errors when the `extension-module` feature is activated. For now you can work around this by making the `extension-module` feature optional and running the tests with `cargo test --no-default-features`:
+
+```toml
+[dependencies.pyo3]
+version = "0.6.0"
+
+[features]
+extension-module = ["pyo3/extension-module"]
+default = ["extension-module"]
+```
+
+### Added
+
+ * Added a `wrap_pymodule!` macro similar to the existing `wrap_pyfunction!` macro. Only available on python 3
+ * Added support for cross compiling (e.g. to arm v7) by mtp401 in [#327](https://github.com/PyO3/pyo3/pull/327). See the "Cross Compiling" section in the "Building and Distribution" chapter of the guide for more details.
+ * The `PyRef` and `PyRefMut` types, which allow to differentiate between an instance of a rust struct on the rust heap and an instance that is embedded inside a python object. By kngwyu in [#335](https://github.com/PyO3/pyo3/pull/335)
+ * Added `FromPy<T>` and `IntoPy<T>` which are equivalent to `From<T>` and `Into<T>` except that they require a gil token.
+ * Added `ManagedPyRef`, which should eventually replace `ToBorrowedObject`.
+
+### Changed
+
+ * Renamed `PyObjectRef` to `PyAny` in #388
+ * Renamed `add_function` to `add_wrapped` as it now also supports modules.
+ * Renamed `#[pymodinit]` to `#[pymodule]`
+ * `py.init(|| value)` becomes `Py::new(value)`
+ * `py.init_ref(|| value)` becomes `PyRef::new(value)`
+ * `py.init_mut(|| value)` becomes `PyRefMut::new(value)`.
+ * `PyRawObject::init` is now infallible, e.g. it returns `()` instead of `PyResult<()>`.
+ * Renamed `py_exception!` to `create_exception!` and refactored the error macros.
+ * Renamed `wrap_function!` to `wrap_pyfunction!`
+ * Renamed `#[prop(get, set)]` to `#[pyo3(get, set)]`
+ * `#[pyfunction]` now supports the same arguments as `#[pyfn()]`
+ * Some macros now emit proper spanned errors instead of panics.
+ * Migrated to the 2018 edition
+ * `crate::types::exceptions` moved to `crate::exceptions`
+ * Replace `IntoPyTuple` with `IntoPy<Py<PyTuple>>`.
+ * `IntoPyPointer` and `ToPyPointer` moved into the crate root.
+ * `class::CompareOp` moved into `class::basic::CompareOp`
+ * PyTypeObject is now a direct subtrait PyTypeCreate, removing the old cyclical implementation in [#350](https://github.com/PyO3/pyo3/pull/350)
+ * Add `PyList::{sort, reverse}` by chr1sj0nes in [#357](https://github.com/PyO3/pyo3/pull/357) and [#358](https://github.com/PyO3/pyo3/pull/358)
+ * Renamed the `typeob` module to `type_object`
 
 ### Removed
 
- * The pyobject_extract macro   
+ * `PyToken` was removed due to unsoundness (See [#94](https://github.com/PyO3/pyo3/issues/94)).
+ * Removed the unnecessary type parameter from `PyObjectAlloc`
+ * `NoArgs`. Just use an empty tuple
+ * `PyObjectWithGIL`. `PyNativeType` is sufficient now that PyToken is removed.
+
+### Fixed
+
+ * A soudness hole where every instances of a `#[pyclass]` struct was considered to be part of a python object, even though you can create instances that are not part of the python heap. This was fixed through `PyRef` and `PyRefMut`.
+ * Fix kwargs support in [#328](https://github.com/PyO3/pyo3/pull/328).
+ * Add full support for `__dict__` in [#403](https://github.com/PyO3/pyo3/pull/403).
+
+## [0.5.3] - 2019-01-04
+
+### Fixed
+
+ * Fix memory leak in ArrayList by kngwyu [#316](https://github.com/PyO3/pyo3/pull/316)
+
+## [0.5.2] - 2018-11-26
+
+### Fixed
+
+ * Fix undeterministic segfaults when creating many objects by kngwyu in [#281](https://github.com/PyO3/pyo3/pull/281)
+
+## [0.5.1] - 2018-11-24
+
+Yanked
+
+## [0.5.0] - 2018-11-11
+
+### Added
+
+ * `#[pyclass]` objects can now be returned from rust functions
+ * `PyComplex` by kngwyu in [#226](https://github.com/PyO3/pyo3/pull/226)
+ * `PyDict::from_sequence()`, equivalent to `dict([(key, val), ...])`
+ * Bindings for the `datetime` standard library types: `PyDate`, `PyTime`, `PyDateTime`, `PyTzInfo`, `PyDelta` with associated `ffi` types, by pganssle [#200](https://github.com/PyO3/pyo3/pull/200).
+ * `PyString`, `PyUnicode`, and `PyBytes` now have an `as_bytes()` method that returns `&[u8]`.
+ * `PyObjectProtocol::get_type_ptr()` by ijl in [#242](https://github.com/PyO3/pyo3/pull/242)
+
+### Removed
+ * Removed most entries from the prelude. The new prelude is small and clear.
+ * Slowly removing specialization uses
+ * `PyString`, `PyUnicode`, and `PyBytes` no longer have a `data()` method
+ (replaced by `as_bytes()`) and `PyStringData` has been removed.
+ * The pyobject_extract macro
+
+### Changed
+ * Removes the types from the root module and the prelude. They now live in `pyo3::types` instead.
+ * All exceptions are consturcted with `py_err` instead of `new`, as they return `PyErr` and not `Self`.
+ * `as_mut` and friends take and `&mut self` instead of `&self`
+ * `ObjectProtocol::call` now takes an `Option<&PyDict>` for the kwargs instead of an `IntoPyDictPointer`.
+ * `IntoPyDictPointer` was replace by `IntoPyDict` which doesn't convert `PyDict` itself anymore and returns a `PyDict` instead of `*mut PyObject`.
+ * `PyTuple::new` now takes an `IntoIterator` instead of a slice
+ * Updated to syn 0.15
+ * Splitted `PyTypeObject` into `PyTypeObject` without the create method and `PyTypeCreate` with requires `PyObjectAlloc<Self> + PyTypeInfo + Sized`.
+ * Ran `cargo edition --fix` which prefixed path with `crate::` for rust 2018
+ * Renamed `async` to `pyasync` as async will be a keyword in the 2018 edition.
+ * Starting to use `NonNull<*mut PyObject>` for Py and PyObject by ijl [#260](https://github.com/PyO3/pyo3/pull/260)
+
+### Fixed
+
+ * Added an explanation that the GIL can temporarily be released even while holding a GILGuard.
+ * Lots of clippy errors
+ * Fix segfault on calling an unknown method on a PyObject
+ * Work around a [bug](https://github.com/rust-lang/rust/issues/55380) in the rust compiler by kngwyu [#252](https://github.com/PyO3/pyo3/pull/252)
+ * Fixed a segfault with subclassing pyo3 create classes and using `__class__` by kngwyu [#263](https://github.com/PyO3/pyo3/pull/263)
 
 ## [0.4.1] - 2018-08-20
 
@@ -97,7 +228,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [0.2.5] - 2018-02-21
 
-### Added 
+### Added
 
 * CPython 3.7 support
 
@@ -116,7 +247,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 * Drop `RefFromPyObject` trait
 * Add Python::register_any() method
 
-### Fixed 
+### Fixed
 
 * Fix impl `FromPyObject` for `Py<T>`
 * Mark method that work with raw pointers as unsafe #95
@@ -155,7 +286,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 * Allow to add gc support without implementing PyGCProtocol #57
 * Refactor `PyErr` implementation. Drop `py` parameter from constructor.
 
-### Added 
+### Added
 
 * Added inheritance support #15
 * Added weakref support #56
@@ -171,6 +302,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 * Initial release
 
+[Unreleased]: https://github.com/pyo3/pyo3/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/pyo3/pyo3/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/pyo3/pyo3/compare/v0.5.3...v0.6.0
+[0.5.3]: https://github.com/pyo3/pyo3/compare/v0.5.2...v0.5.3
+[0.5.2]: https://github.com/pyo3/pyo3/compare/v0.5.0...v0.5.2
+[0.5.0]: https://github.com/pyo3/pyo3/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/pyo3/pyo3/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/pyo3/pyo3/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/pyo3/pyo3/compare/v0.3.1...v0.3.2

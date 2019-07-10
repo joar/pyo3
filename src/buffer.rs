@@ -17,20 +17,22 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! `PyBuffer` implementation
+use crate::err::{self, PyResult};
+use crate::exceptions;
+use crate::ffi;
+use crate::types::PyAny;
+use crate::AsPyPointer;
+use crate::Python;
 use libc;
 use std::ffi::CStr;
 use std::os::raw;
+use std::pin::Pin;
 use std::{cell, mem, slice};
 
-use err::{self, PyResult};
-use exc;
-use ffi;
-use objects::PyObjectRef;
-use python::{Python, ToPyPointer};
-
 /// Allows access to the underlying buffer used by a python object such as `bytes`, `bytearray` or `array.array`.
+// use Pin<Box> because Python expects that the Py_buffer struct has a stable memory address
 #[repr(transparent)]
-pub struct PyBuffer(Box<ffi::Py_buffer>); // use Box<> because Python expects that the Py_buffer struct has a stable memory address
+pub struct PyBuffer(Pin<Box<ffi::Py_buffer>>);
 
 // PyBuffer is thread-safe: the shape of the buffer is immutable while a Py_buffer exists.
 // Accessing the buffer contents is protected using the GIL.
@@ -163,9 +165,9 @@ fn validate(b: &ffi::Py_buffer) {
 
 impl PyBuffer {
     /// Get the underlying buffer from the specified python object.
-    pub fn get(py: Python, obj: &PyObjectRef) -> PyResult<PyBuffer> {
+    pub fn get(py: Python, obj: &PyAny) -> PyResult<PyBuffer> {
         unsafe {
-            let mut buf = Box::new(mem::zeroed::<ffi::Py_buffer>());
+            let mut buf = Box::pin(mem::zeroed::<ffi::Py_buffer>());
             err::error_on_minusone(
                 py,
                 ffi::PyObject_GetBuffer(obj.as_ptr(), &mut *buf, ffi::PyBUF_FULL_RO),
@@ -279,7 +281,7 @@ impl PyBuffer {
     #[inline]
     pub fn format(&self) -> &CStr {
         if self.0.format.is_null() {
-            cstr!("B")
+            CStr::from_bytes_with_nul(b"B\0").unwrap()
         } else {
             unsafe { CStr::from_ptr(self.0.format) }
         }
@@ -289,11 +291,7 @@ impl PyBuffer {
     #[inline]
     pub fn is_c_contiguous(&self) -> bool {
         unsafe {
-            // Python 2.7 is not const-correct, so we need the cast to *mut
-            ffi::PyBuffer_IsContiguous(
-                &*self.0 as *const ffi::Py_buffer as *mut ffi::Py_buffer,
-                b'C' as libc::c_char,
-            ) != 0
+            ffi::PyBuffer_IsContiguous(&*self.0 as *const ffi::Py_buffer, b'C' as libc::c_char) != 0
         }
     }
 
@@ -301,11 +299,7 @@ impl PyBuffer {
     #[inline]
     pub fn is_fortran_contiguous(&self) -> bool {
         unsafe {
-            // Python 2.7 is not const-correct, so we need the cast to *mut
-            ffi::PyBuffer_IsContiguous(
-                &*self.0 as *const ffi::Py_buffer as *mut ffi::Py_buffer,
-                b'F' as libc::c_char,
-            ) != 0
+            ffi::PyBuffer_IsContiguous(&*self.0 as *const ffi::Py_buffer, b'F' as libc::c_char) != 0
         }
     }
 
@@ -460,7 +454,7 @@ impl PyBuffer {
         fort: u8,
     ) -> PyResult<()> {
         if mem::size_of_val(target) != self.len_bytes() {
-            return Err(exc::BufferError::py_err(
+            return Err(exceptions::BufferError::py_err(
                 "Slice length does not match buffer length.",
             ));
         }
@@ -563,7 +557,7 @@ impl PyBuffer {
             return buffer_readonly_error();
         }
         if mem::size_of_val(source) != self.len_bytes() {
-            return Err(exc::BufferError::py_err(
+            return Err(exceptions::BufferError::py_err(
                 "Slice length does not match buffer length.",
             ));
         }
@@ -593,13 +587,13 @@ impl PyBuffer {
 }
 
 fn incompatible_format_error() -> PyResult<()> {
-    Err(exc::BufferError::py_err(
+    Err(exceptions::BufferError::py_err(
         "Slice type is incompatible with buffer format.",
     ))
 }
 
 fn buffer_readonly_error() -> PyResult<()> {
-    Err(exc::BufferError::py_err(
+    Err(exceptions::BufferError::py_err(
         "Cannot write to read-only buffer.",
     ))
 }
@@ -661,17 +655,17 @@ impl_element!(f64, Float);
 #[cfg(test)]
 mod test {
     use super::PyBuffer;
-    use python::Python;
-    use std;
+    use crate::ffi;
+    use crate::Python;
 
     #[allow(unused_imports)]
-    use objectprotocol::ObjectProtocol;
+    use crate::objectprotocol::ObjectProtocol;
 
     #[test]
     fn test_compatible_size() {
         // for the cast in PyBuffer::shape()
         assert_eq!(
-            std::mem::size_of::<::ffi::Py_ssize_t>(),
+            std::mem::size_of::<ffi::Py_ssize_t>(),
             std::mem::size_of::<usize>()
         );
     }
@@ -713,7 +707,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(Py_3)] // array.array doesn't implement the buffer protocol in python 2.7
     fn test_array_buffer() {
         let gil = Python::acquire_gil();
         let py = gil.python();

@@ -4,12 +4,11 @@
 //!
 //! For more information check [buffer protocol](https://docs.python.org/3/c-api/buffer.html)
 //! c-api
+use crate::callback::UnitCallbackConverter;
+use crate::err::PyResult;
+use crate::ffi;
+use crate::type_object::PyTypeInfo;
 use std::os::raw::c_int;
-
-use callback::UnitCallbackConverter;
-use err::PyResult;
-use ffi;
-use typeob::PyTypeInfo;
 
 /// Buffer protocol interface
 ///
@@ -54,6 +53,7 @@ where
     T: PyBufferProtocol<'p>,
 {
     #[inline]
+    #[allow(clippy::needless_update)] // For python 2 it's not useless
     fn tp_as_buffer() -> Option<ffi::PyBufferProcs> {
         Some(ffi::PyBufferProcs {
             bf_getbuffer: Self::cb_bf_getbuffer(),
@@ -85,12 +85,12 @@ where
         where
             T: for<'p> PyBufferGetBufferProtocol<'p>,
         {
-            let _pool = ::GILPool::new();
-            let py = ::Python::assume_gil_acquired();
+            let _pool = crate::GILPool::new();
+            let py = crate::Python::assume_gil_acquired();
             let slf = py.mut_from_borrowed_ptr::<T>(slf);
 
             let result = slf.bf_getbuffer(arg1, arg2).into();
-            ::callback::cb_convert(UnitCallbackConverter, py, result)
+            crate::callback::cb_convert(UnitCallbackConverter, py, result)
         }
         Some(wrap::<T>)
     }

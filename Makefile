@@ -1,22 +1,16 @@
-.PHONY: default test
-
-ifndef PY
-PY := $(word 2, $(subst ., ,$(shell python --version 2>&1)))
-endif
-
-ifeq ($(PY),2)
-FEATURES := python2
-endif
-ifeq ($(PY),3)
-FEATURES := python3
-endif
-
-CARGO_FLAGS := --features "$(FEATURES)" --no-default-features
-
-default: test
+.PHONY: test test_py3 publish
 
 test:
-	cargo test $(CARGO_FLAGS)
-	pip install setuptools-rust pytest pytest-benchmark tox
-	cd examples/word-count && python setup.py install && pytest -v tests
-	cd examples/rustapi_module && tox
+	cargo test
+	cargo clippy
+	tox
+	for example in examples/*; do tox -e py -c $$example/tox.ini; done
+
+test_py3:
+	tox -e py3
+	for example in examples/*; do tox -e py3 -c $$example/tox.ini; done
+
+publish: test
+	cargo publish --manifest-path pyo3-derive-backend/Cargo.toml
+	cargo publish --manifest-path pyo3cls/Cargo.toml
+	cargo publish

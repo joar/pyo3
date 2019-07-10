@@ -1,14 +1,15 @@
 // Copyright (c) 2017-present PyO3 Project and Contributors
-use syn;
 
+use proc_macro2::Span;
 use proc_macro2::TokenStream;
+use syn;
 
 pub fn print_err(msg: String, t: TokenStream) {
     println!("Error: {} in '{}'", msg, t.to_string());
 }
 
 // FIXME(althonos): not sure the docstring formatting is on par here.
-pub fn get_doc(attrs: &Vec<syn::Attribute>, null_terminated: bool) -> syn::Lit {
+pub fn get_doc(attrs: &[syn::Attribute], null_terminated: bool) -> syn::Lit {
     let mut doc = Vec::new();
 
     // TODO(althonos): set span on produced doc str literal
@@ -20,24 +21,22 @@ pub fn get_doc(attrs: &Vec<syn::Attribute>, null_terminated: bool) -> syn::Lit {
                 // span = Some(metanv.span());
                 if let syn::Lit::Str(ref litstr) = metanv.lit {
                     let d = litstr.value();
-                    doc.push(if d.starts_with(" ") {
+                    doc.push(if d.starts_with(' ') {
                         d[1..d.len()].to_string()
                     } else {
                         d
                     });
                 } else {
-                    panic!("could not parse doc");
+                    panic!("Invalid doc comment");
                 }
             }
         }
     }
 
-    let doc = doc.join("\n");
+    let mut docstr = doc.join("\n");
+    if null_terminated {
+        docstr.push('\0');
+    }
 
-    // FIXME: add span
-    syn::parse_str(&if null_terminated {
-        format!("\"{}\0\"", doc)
-    } else {
-        format!("\"{}\"", doc)
-    }).unwrap()
+    syn::Lit::Str(syn::LitStr::new(&docstr, Span::call_site()))
 }

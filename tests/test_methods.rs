@@ -1,16 +1,13 @@
-#![feature(specialization)]
-
-extern crate pyo3;
-
 use pyo3::prelude::*;
+use pyo3::py_run;
+use pyo3::types::{IntoPyDict, PyDict, PyList, PySet, PyString, PyTuple, PyType};
+use pyo3::PyRawObject;
 
-#[macro_use]
 mod common;
 
 #[pyclass]
 struct InstanceMethod {
     member: i32,
-    token: PyToken,
 }
 
 #[pymethods]
@@ -26,14 +23,9 @@ fn instance_method() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let obj = py
-        .init_ref(|t| InstanceMethod {
-            member: 42,
-            token: t,
-        }).unwrap();
+    let obj = PyRefMut::new(py, InstanceMethod { member: 42 }).unwrap();
     assert_eq!(obj.method().unwrap(), 42);
-    let d = PyDict::new(py);
-    d.set_item("obj", obj).unwrap();
+    let d = [("obj", obj)].into_py_dict(py);
     py.run("assert obj.method() == 42", None, Some(d)).unwrap();
     py.run("assert obj.method.__doc__ == 'Test method'", None, Some(d))
         .unwrap();
@@ -42,7 +34,6 @@ fn instance_method() {
 #[pyclass]
 struct InstanceMethodWithArgs {
     member: i32,
-    token: PyToken,
 }
 
 #[pymethods]
@@ -52,20 +43,15 @@ impl InstanceMethodWithArgs {
     }
 }
 
-//#[test]
+#[test]
 #[allow(dead_code)]
 fn instance_method_with_args() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let obj = py
-        .init_ref(|t| InstanceMethodWithArgs {
-            member: 7,
-            token: t,
-        }).unwrap();
-    assert!(obj.method(6).unwrap() == 42);
-    let d = PyDict::new(py);
-    d.set_item("obj", obj).unwrap();
+    let obj = PyRefMut::new(py, InstanceMethodWithArgs { member: 7 }).unwrap();
+    assert_eq!(obj.method(6).unwrap(), 42);
+    let d = [("obj", obj)].into_py_dict(py);
     py.run("assert obj.method(3) == 21", None, Some(d)).unwrap();
     py.run("assert obj.method(multiplier=6) == 42", None, Some(d))
         .unwrap();
@@ -77,11 +63,12 @@ struct ClassMethod {}
 #[pymethods]
 impl ClassMethod {
     #[new]
-    fn __new__(obj: &PyRawObject) -> PyResult<()> {
-        obj.init(|_| ClassMethod {})
+    fn new(obj: &PyRawObject) {
+        obj.init(ClassMethod {})
     }
 
     #[classmethod]
+    /// Test class method.
     fn method(cls: &PyType) -> PyResult<String> {
         Ok(format!("{}.method()!", cls.name()))
     }
@@ -92,24 +79,35 @@ fn class_method() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let d = PyDict::new(py);
-    d.set_item("C", py.get_type::<ClassMethod>()).unwrap();
+    let d = [("C", py.get_type::<ClassMethod>())].into_py_dict(py);
     py.run(
         "assert C.method() == 'ClassMethod.method()!'",
         None,
         Some(d),
-    ).unwrap();
+    )
+    .unwrap();
     py.run(
         "assert C().method() == 'ClassMethod.method()!'",
         None,
         Some(d),
-    ).unwrap();
+    )
+    .unwrap();
+    py.run(
+        "assert C.method.__doc__ == 'Test class method.'",
+        None,
+        Some(d),
+    )
+    .unwrap();
+    py.run(
+        "assert C().method.__doc__ == 'Test class method.'",
+        None,
+        Some(d),
+    )
+    .unwrap();
 }
 
 #[pyclass]
-struct ClassMethodWithArgs {
-    token: PyToken,
-}
+struct ClassMethodWithArgs {}
 
 #[pymethods]
 impl ClassMethodWithArgs {
@@ -124,29 +122,27 @@ fn class_method_with_args() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let d = PyDict::new(py);
-    d.set_item("C", py.get_type::<ClassMethodWithArgs>())
-        .unwrap();
+    let d = [("C", py.get_type::<ClassMethodWithArgs>())].into_py_dict(py);
     py.run(
         "assert C.method('abc') == 'ClassMethodWithArgs.method(abc)'",
         None,
         Some(d),
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[pyclass]
-struct StaticMethod {
-    token: PyToken,
-}
+struct StaticMethod {}
 
 #[pymethods]
 impl StaticMethod {
     #[new]
-    fn __new__(obj: &PyRawObject) -> PyResult<()> {
-        obj.init(|t| StaticMethod { token: t })
+    fn new(obj: &PyRawObject) {
+        obj.init(StaticMethod {})
     }
 
     #[staticmethod]
+    /// Test static method.
     fn method(_py: Python) -> PyResult<&'static str> {
         Ok("StaticMethod.method()!")
     }
@@ -158,24 +154,36 @@ fn static_method() {
     let py = gil.python();
 
     assert_eq!(StaticMethod::method(py).unwrap(), "StaticMethod.method()!");
-    let d = PyDict::new(py);
-    d.set_item("C", py.get_type::<StaticMethod>()).unwrap();
+
+    let d = [("C", py.get_type::<StaticMethod>())].into_py_dict(py);
     py.run(
         "assert C.method() == 'StaticMethod.method()!'",
         None,
         Some(d),
-    ).unwrap();
+    )
+    .unwrap();
     py.run(
         "assert C().method() == 'StaticMethod.method()!'",
         None,
         Some(d),
-    ).unwrap();
+    )
+    .unwrap();
+    py.run(
+        "assert C.method.__doc__ == 'Test static method.'",
+        None,
+        Some(d),
+    )
+    .unwrap();
+    py.run(
+        "assert C().method.__doc__ == 'Test static method.'",
+        None,
+        Some(d),
+    )
+    .unwrap();
 }
 
 #[pyclass]
-struct StaticMethodWithArgs {
-    token: PyToken,
-}
+struct StaticMethodWithArgs {}
 
 #[pymethods]
 impl StaticMethodWithArgs {
@@ -192,17 +200,13 @@ fn static_method_with_args() {
 
     assert_eq!(StaticMethodWithArgs::method(py, 1234).unwrap(), "0x4d2");
 
-    let d = PyDict::new(py);
-    d.set_item("C", py.get_type::<StaticMethodWithArgs>())
-        .unwrap();
+    let d = [("C", py.get_type::<StaticMethodWithArgs>())].into_py_dict(py);
     py.run("assert C.method(1337) == '0x539'", None, Some(d))
         .unwrap();
 }
 
 #[pyclass]
-struct MethArgs {
-    token: PyToken,
-}
+struct MethArgs {}
 
 #[pymethods]
 impl MethArgs {
@@ -220,8 +224,13 @@ impl MethArgs {
         Ok(test)
     }
     #[args(args = "*", kwargs = "**")]
-    fn get_kwargs(&self, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<PyObject> {
-        Ok([args.into(), kwargs.to_object(self.py())].to_object(self.py()))
+    fn get_kwargs(
+        &self,
+        py: Python,
+        args: &PyTuple,
+        kwargs: Option<&PyDict>,
+    ) -> PyResult<PyObject> {
+        Ok([args.into(), kwargs.to_object(py)].to_object(py))
     }
 }
 
@@ -229,7 +238,7 @@ impl MethArgs {
 fn meth_args() {
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let inst = py.init(|t| MethArgs { token: t }).unwrap();
+    let inst = Py::new(py, MethArgs {}).unwrap();
 
     py_run!(py, inst, "assert inst.get_optional() == 10");
     py_run!(py, inst, "assert inst.get_optional(100) == 100");
@@ -249,5 +258,79 @@ fn meth_args() {
         py,
         inst,
         "assert inst.get_kwargs(1,2,3,t=1,n=2) == [(1,2,3), {'t': 1, 'n': 2}]"
+    );
+}
+
+#[pyclass]
+/// A class with "documentation".
+struct MethDocs {
+    x: i32,
+}
+
+#[pymethods]
+impl MethDocs {
+    /// A method with "documentation" as well.
+    fn method(&self) -> PyResult<i32> {
+        Ok(0)
+    }
+
+    #[getter]
+    /// `int`: a very "important" member of 'this' instance.
+    fn get_x(&self) -> PyResult<i32> {
+        Ok(self.x)
+    }
+}
+
+#[test]
+fn meth_doc() {
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let d = [("C", py.get_type::<MethDocs>())].into_py_dict(py);
+
+    py.run(
+        "assert C.__doc__ == 'A class with \"documentation\".'",
+        None,
+        Some(d),
+    )
+    .unwrap();
+    py.run(
+        "assert C.method.__doc__ == 'A method with \"documentation\" as well.'",
+        None,
+        Some(d),
+    )
+    .unwrap();
+    py.run(
+        "assert C.x.__doc__ == '`int`: a very \"important\" member of \\'this\\' instance.'",
+        None,
+        Some(d),
+    )
+    .unwrap();
+}
+
+#[pyclass]
+struct MethodWithLifeTime {}
+
+#[pymethods]
+impl MethodWithLifeTime {
+    fn set_to_list<'py>(&self, py: Python<'py>, set: &'py PySet) -> PyResult<&'py PyList> {
+        let mut items = vec![];
+        for _ in 0..set.len() {
+            items.push(set.pop().unwrap());
+        }
+        let list = PyList::new(py, items);
+        list.sort()?;
+        Ok(list)
+    }
+}
+
+#[test]
+fn method_with_lifetime() {
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let obj = PyRef::new(py, MethodWithLifeTime {}).unwrap();
+    py_run!(
+        py,
+        obj,
+        "assert obj.set_to_list(set((1, 2, 3))) == [1, 2, 3]"
     );
 }

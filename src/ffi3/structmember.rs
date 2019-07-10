@@ -1,5 +1,5 @@
-use ffi3::object::PyObject;
-use ffi3::pyport::Py_ssize_t;
+use crate::ffi3::object::PyObject;
+use crate::ffi3::pyport::Py_ssize_t;
 use std::os::raw::{c_char, c_int};
 
 #[repr(C)]
@@ -36,8 +36,8 @@ pub const T_STRING_INPLACE: c_int = 13;
 pub const T_BOOL: c_int = 14;
 
 pub const T_OBJECT_EX: c_int = 16; /* Like T_OBJECT, but raises AttributeError
-                   when the value is NULL, instead of
-                   converting to None. */
+                                   when the value is NULL, instead of
+                                   converting to None. */
 
 pub const T_LONGLONG: c_int = 17;
 pub const T_ULONGLONG: c_int = 18;

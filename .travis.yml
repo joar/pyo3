@@ -1,22 +1,33 @@
 language: python
 
+dist: xenial
+
 cache:
   pip: true
   cargo: true
+  directories:
+    - "$HOME/kcov"
 
 matrix:
   include:
-    - python: "2.7"
-      env: FEATURES=python2
-    - python: "3.5"
-      env: FEATURES=python3
-    - python: "3.6"
-      env: FEATURES=python3
-    - python: "3.7-dev"
-      env: FEATURES=python3
+    - name: Python 3.5
+      python: "3.5"
+    - name: Python 3.6
+      python: "3.6"
+    - name: Python 3.7
+      python: "3.7"
+    - name: Python 3.8-dev
+      python: "3.8-dev"
+    - name: Minimum nightly
+      python: "3.7"
+      # Keep this synced up with build.rs
+      env: TRAVIS_RUST_VERSION=nightly-2019-06-22
+      # Tested via anaconda PyPy (since travis's PyPy version is too old)
+    - name: PyPy3.5 7.0
+      python: "3.7"
+      env: FEATURES="pypy" PATH="$PATH:/opt/anaconda/envs/pypy3/bin"
   allow_failures:
-    - python: "3.7-dev"
-      env: FEATURES=python3
+    - python: "3.8-dev"
 
 env:
   global:
@@ -43,14 +54,16 @@ install:
 script:
   - ./ci/travis/test.sh
 
+after_success:
+  - ./ci/travis/cover.sh || true
+
 deploy:
-# FIXME: kcov seems to be broken
-#  - provider: script
-#    skip_cleanup: true
-#    script: ./ci/travis/cover.sh
-#    on:
-#      branch: master
-#      condition: $TRAVIS_EVENT_TYPE != "cron"
+  - provider: script
+    skip_cleanup: true
+    script: ./ci/travis/cover.sh || true
+    on:
+      branch: master
+      condition: $TRAVIS_EVENT_TYPE != "cron"
   - provider: script
     skip_cleanup: true
     script: ./ci/travis/guide.sh

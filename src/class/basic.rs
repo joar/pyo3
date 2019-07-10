@@ -8,19 +8,30 @@
 //! Parts of the documentation are copied from the respective methods from the
 //! [typeobj docs](https://docs.python.org/3/c-api/typeobj.html)
 
+use crate::callback::{BoolCallbackConverter, HashConverter, PyObjectCallbackConverter};
+use crate::class::methods::PyMethodDef;
+use crate::err::{PyErr, PyResult};
+use crate::exceptions;
+use crate::ffi;
+use crate::objectprotocol::ObjectProtocol;
+use crate::type_object::PyTypeInfo;
+use crate::types::PyAny;
+use crate::IntoPyPointer;
+use crate::Python;
+use crate::{FromPyObject, IntoPyObject};
 use std::os::raw::c_int;
 use std::ptr;
 
-use callback::{BoolCallbackConverter, HashConverter, PyObjectCallbackConverter};
-use class::methods::PyMethodDef;
-use conversion::{FromPyObject, IntoPyObject};
-use err::{PyErr, PyResult};
-use ffi;
-use objectprotocol::ObjectProtocol;
-use objects::{exc, PyObjectRef};
-use python::{IntoPyPointer, Python};
-use typeob::PyTypeInfo;
-use CompareOp;
+/// Operators for the __richcmp__ method
+#[derive(Debug)]
+pub enum CompareOp {
+    Lt = ffi::Py_LT as isize,
+    Le = ffi::Py_LE as isize,
+    Eq = ffi::Py_EQ as isize,
+    Ne = ffi::Py_NE as isize,
+    Gt = ffi::Py_GT as isize,
+    Ge = ffi::Py_GE as isize,
+}
 
 /// Basic python class customization
 #[allow(unused_variables)]
@@ -88,14 +99,6 @@ pub trait PyObjectProtocol<'p>: PyTypeInfo {
         unimplemented!()
     }
 
-    /// This method is used by Python2 only.
-    fn __unicode__(&'p self) -> Self::Result
-    where
-        Self: PyObjectUnicodeProtocol<'p>,
-    {
-        unimplemented!()
-    }
-
     fn __richcmp__(&'p self, other: Self::Other, op: CompareOp) -> Self::Result
     where
         Self: PyObjectRichcmpProtocol<'p>,
@@ -123,10 +126,6 @@ pub trait PyObjectStrProtocol<'p>: PyObjectProtocol<'p> {
     type Result: Into<PyResult<Self::Success>>;
 }
 pub trait PyObjectReprProtocol<'p>: PyObjectProtocol<'p> {
-    type Success: IntoPyObject;
-    type Result: Into<PyResult<Self::Success>>;
-}
-pub trait PyObjectUnicodeProtocol<'p>: PyObjectProtocol<'p> {
     type Success: IntoPyObject;
     type Result: Into<PyResult<Self::Success>>;
 }
@@ -426,10 +425,10 @@ where
         where
             T: for<'p> PyObjectRichcmpProtocol<'p>,
         {
-            let _pool = ::GILPool::new();
+            let _pool = crate::GILPool::new();
             let py = Python::assume_gil_acquired();
             let slf = py.from_borrowed_ptr::<T>(slf);
-            let arg = py.from_borrowed_ptr::<PyObjectRef>(arg);
+            let arg = py.from_borrowed_ptr::<PyAny>(arg);
 
             let res = match extract_op(op) {
                 Ok(op) => match arg.extract() {
@@ -458,7 +457,7 @@ fn extract_op(op: c_int) -> PyResult<CompareOp> {
         ffi::Py_NE => Ok(CompareOp::Ne),
         ffi::Py_GT => Ok(CompareOp::Gt),
         ffi::Py_GE => Ok(CompareOp::Ge),
-        _ => Err(PyErr::new::<exc::ValueError, _>(
+        _ => Err(PyErr::new::<exceptions::ValueError, _>(
             "tp_richcompare called with invalid comparison operator",
         )),
     }

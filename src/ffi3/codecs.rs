@@ -1,4 +1,4 @@
-use ffi3::object::PyObject;
+use crate::ffi3::object::PyObject;
 use std::os::raw::{c_char, c_int};
 
 #[cfg_attr(windows, link(name = "pythonXY"))]
@@ -17,10 +17,12 @@ extern "C" {
     ) -> *mut PyObject;
     pub fn PyCodec_Encoder(encoding: *const c_char) -> *mut PyObject;
     pub fn PyCodec_Decoder(encoding: *const c_char) -> *mut PyObject;
+    #[cfg_attr(PyPy, link_name = "PyPyCodec_IncrementalEncoder")]
     pub fn PyCodec_IncrementalEncoder(
         encoding: *const c_char,
         errors: *const c_char,
     ) -> *mut PyObject;
+    #[cfg_attr(PyPy, link_name = "PyPyCodec_IncrementalDecoder")]
     pub fn PyCodec_IncrementalDecoder(
         encoding: *const c_char,
         errors: *const c_char,

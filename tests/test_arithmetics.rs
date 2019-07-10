@@ -1,10 +1,9 @@
-#![feature(specialization)]
-
-extern crate pyo3;
-
+use pyo3::class::basic::CompareOp;
+use pyo3::class::*;
 use pyo3::prelude::*;
+use pyo3::py_run;
+use pyo3::types::PyAny;
 
-#[macro_use]
 mod common;
 
 #[pyclass]
@@ -34,7 +33,7 @@ fn unary_arithmetic() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let c = py.init(|_| UnaryArithmetic {}).unwrap();
+    let c = Py::new(py, UnaryArithmetic {}).unwrap();
     py_run!(py, c, "assert -c == 'neg'");
     py_run!(py, c, "assert +c == 'pos'");
     py_run!(py, c, "assert abs(c) == 'abs'");
@@ -112,7 +111,7 @@ fn inplace_operations() {
     let py = gil.python();
 
     let init = |value, code| {
-        let c = py.init(|_| InPlaceOperations { value }).unwrap();
+        let c = Py::new(py, InPlaceOperations { value }).unwrap();
         py_run!(py, c, code);
     };
 
@@ -128,35 +127,35 @@ fn inplace_operations() {
 
 #[pyproto]
 impl PyNumberProtocol for BinaryArithmetic {
-    fn __add__(lhs: &PyObjectRef, rhs: &PyObjectRef) -> PyResult<String> {
+    fn __add__(lhs: &PyAny, rhs: &PyAny) -> PyResult<String> {
         Ok(format!("{:?} + {:?}", lhs, rhs))
     }
 
-    fn __sub__(lhs: &PyObjectRef, rhs: &PyObjectRef) -> PyResult<String> {
+    fn __sub__(lhs: &PyAny, rhs: &PyAny) -> PyResult<String> {
         Ok(format!("{:?} - {:?}", lhs, rhs))
     }
 
-    fn __mul__(lhs: &PyObjectRef, rhs: &PyObjectRef) -> PyResult<String> {
+    fn __mul__(lhs: &PyAny, rhs: &PyAny) -> PyResult<String> {
         Ok(format!("{:?} * {:?}", lhs, rhs))
     }
 
-    fn __lshift__(lhs: &PyObjectRef, rhs: &PyObjectRef) -> PyResult<String> {
+    fn __lshift__(lhs: &PyAny, rhs: &PyAny) -> PyResult<String> {
         Ok(format!("{:?} << {:?}", lhs, rhs))
     }
 
-    fn __rshift__(lhs: &PyObjectRef, rhs: &PyObjectRef) -> PyResult<String> {
+    fn __rshift__(lhs: &PyAny, rhs: &PyAny) -> PyResult<String> {
         Ok(format!("{:?} >> {:?}", lhs, rhs))
     }
 
-    fn __and__(lhs: &PyObjectRef, rhs: &PyObjectRef) -> PyResult<String> {
+    fn __and__(lhs: &PyAny, rhs: &PyAny) -> PyResult<String> {
         Ok(format!("{:?} & {:?}", lhs, rhs))
     }
 
-    fn __xor__(lhs: &PyObjectRef, rhs: &PyObjectRef) -> PyResult<String> {
+    fn __xor__(lhs: &PyAny, rhs: &PyAny) -> PyResult<String> {
         Ok(format!("{:?} ^ {:?}", lhs, rhs))
     }
 
-    fn __or__(lhs: &PyObjectRef, rhs: &PyObjectRef) -> PyResult<String> {
+    fn __or__(lhs: &PyAny, rhs: &PyAny) -> PyResult<String> {
         Ok(format!("{:?} | {:?}", lhs, rhs))
     }
 }
@@ -166,7 +165,7 @@ fn binary_arithmetic() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let c = py.init(|_| BinaryArithmetic {}).unwrap();
+    let c = Py::new(py, BinaryArithmetic {}).unwrap();
     py_run!(py, c, "assert c + c == 'BA + BA'");
     py_run!(py, c, "assert c + 1 == 'BA + 1'");
     py_run!(py, c, "assert 1 + c == '1 + BA'");
@@ -196,7 +195,7 @@ impl PyObjectProtocol for RichComparisons {
         Ok("RC")
     }
 
-    fn __richcmp__(&self, other: &PyObjectRef, op: CompareOp) -> PyResult<String> {
+    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<String> {
         match op {
             CompareOp::Lt => Ok(format!("{} < {:?}", self.__repr__().unwrap(), other)),
             CompareOp::Le => Ok(format!("{} <= {:?}", self.__repr__().unwrap(), other)),
@@ -209,9 +208,7 @@ impl PyObjectProtocol for RichComparisons {
 }
 
 #[pyclass]
-struct RichComparisons2 {
-    py: PyToken,
-}
+struct RichComparisons2 {}
 
 #[pyproto]
 impl PyObjectProtocol for RichComparisons2 {
@@ -219,11 +216,12 @@ impl PyObjectProtocol for RichComparisons2 {
         Ok("RC2")
     }
 
-    fn __richcmp__(&self, _other: &PyObjectRef, op: CompareOp) -> PyResult<PyObject> {
+    fn __richcmp__(&self, _other: &PyAny, op: CompareOp) -> PyResult<PyObject> {
+        let gil = GILGuard::acquire();
         match op {
-            CompareOp::Eq => Ok(true.to_object(self.py())),
-            CompareOp::Ne => Ok(false.to_object(self.py())),
-            _ => Ok(self.py().NotImplemented()),
+            CompareOp::Eq => Ok(true.to_object(gil.python())),
+            CompareOp::Ne => Ok(false.to_object(gil.python())),
+            _ => Ok(gil.python().NotImplemented()),
         }
     }
 }
@@ -233,7 +231,7 @@ fn rich_comparisons() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let c = py.init(|_| RichComparisons {}).unwrap();
+    let c = Py::new(py, RichComparisons {}).unwrap();
     py_run!(py, c, "assert (c < c) == 'RC < RC'");
     py_run!(py, c, "assert (c < 1) == 'RC < 1'");
     py_run!(py, c, "assert (1 < c) == 'RC > 1'");
@@ -255,12 +253,11 @@ fn rich_comparisons() {
 }
 
 #[test]
-#[cfg(Py_3)]
 fn rich_comparisons_python_3_type_error() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let c2 = py.init(|t| RichComparisons2 { py: t }).unwrap();
+    let c2 = Py::new(py, RichComparisons2 {}).unwrap();
     py_expect_exception!(py, c2, "c2 < c2", TypeError);
     py_expect_exception!(py, c2, "c2 < 1", TypeError);
     py_expect_exception!(py, c2, "1 < c2", TypeError);

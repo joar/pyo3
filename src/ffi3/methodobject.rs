@@ -1,12 +1,12 @@
-use ffi3::object::{PyObject, PyTypeObject, Py_TYPE};
+use crate::ffi3::object::{PyObject, PyTypeObject, Py_TYPE};
 use std::os::raw::{c_char, c_int};
 use std::{mem, ptr};
 
 #[cfg_attr(windows, link(name = "pythonXY"))]
 extern "C" {
+    #[cfg_attr(PyPy, link_name = "PyPyCFunction_Type")]
     pub static mut PyCFunction_Type: PyTypeObject;
 }
-
 #[inline]
 pub unsafe fn PyCFunction_Check(op: *mut PyObject) -> c_int {
     (Py_TYPE(op) == &mut PyCFunction_Type) as c_int
@@ -19,18 +19,21 @@ pub type PyCFunction =
 pub type _PyCFunctionFast = unsafe extern "C" fn(
     slf: *mut PyObject,
     args: *mut *mut PyObject,
-    nargs: ::ffi3::pyport::Py_ssize_t,
+    nargs: crate::ffi3::pyport::Py_ssize_t,
     kwnames: *mut PyObject,
 ) -> *mut PyObject;
 
-pub type PyCFunctionWithKeywords =
-    unsafe extern "C" fn(slf: *mut PyObject, args: *mut PyObject, kwds: *mut PyObject)
-        -> *mut PyObject;
+pub type PyCFunctionWithKeywords = unsafe extern "C" fn(
+    slf: *mut PyObject,
+    args: *mut PyObject,
+    kwds: *mut PyObject,
+) -> *mut PyObject;
 
 pub type PyNoArgsFunction = unsafe extern "C" fn(slf: *mut PyObject) -> *mut PyObject;
 
 #[cfg_attr(windows, link(name = "pythonXY"))]
 extern "C" {
+    #[cfg_attr(PyPy, link_name = "PyPyCFunction_GetFunction")]
     pub fn PyCFunction_GetFunction(f: *mut PyObject) -> Option<PyCFunction>;
     pub fn PyCFunction_GetSelf(f: *mut PyObject) -> *mut PyObject;
     pub fn PyCFunction_GetFlags(f: *mut PyObject) -> c_int;
@@ -65,11 +68,13 @@ impl Default for PyMethodDef {
 
 #[inline]
 pub unsafe fn PyCFunction_New(ml: *mut PyMethodDef, slf: *mut PyObject) -> *mut PyObject {
+    #[cfg_attr(PyPy, link_name = "PyPyCFunction_NewEx")]
     PyCFunction_NewEx(ml, slf, ptr::null_mut())
 }
 
 #[cfg_attr(windows, link(name = "pythonXY"))]
 extern "C" {
+    #[cfg_attr(PyPy, link_name = "PyPyCFunction_NewEx")]
     pub fn PyCFunction_NewEx(
         arg1: *mut PyMethodDef,
         arg2: *mut PyObject,
@@ -85,15 +90,15 @@ pub const METH_NOARGS: c_int = 0x0004;
 pub const METH_O: c_int = 0x0008;
 
 /* METH_CLASS and METH_STATIC are a little different; these control
-   the construction of methods for a class.  These cannot be used for
-   functions in modules. */
+the construction of methods for a class.  These cannot be used for
+functions in modules. */
 pub const METH_CLASS: c_int = 0x0010;
 pub const METH_STATIC: c_int = 0x0020;
 
 /* METH_COEXIST allows a method to be entered eventhough a slot has
-   already filled the entry.  When defined, the flag allows a separate
-   method, "__contains__" for example, to coexist with a defined
-   slot like sq_contains. */
+already filled the entry.  When defined, the flag allows a separate
+method, "__contains__" for example, to coexist with a defined
+slot like sq_contains. */
 
 pub const METH_COEXIST: c_int = 0x0040;
 
